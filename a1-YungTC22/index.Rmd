@@ -1,0 +1,221 @@
+---
+title: "Health Burden Report"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Set Up 
+library(dplyr)
+library(knitr)
+library(formattable)
+library(tidyverse)
+library(ggrepel)
+library(ggplot2)
+library(DT)
+library(plotly)
+library(scales)
+
+# Load Data
+death_data <- read.csv('data/deaths.csv')
+expectancy_data <- read.csv('data/life_expectancy.csv')
+ylds_data <- read.csv('data/ylds.csv')
+
+## Multiplot Function 
+multiplot <- function(..., plotlist = NULL, file, cols = 1, layout = NULL) {
+  require(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+```
+
+# SUMMARY
+This RMarkdown File will be consisting of data (estimates) from the Global Burden of Disease. This RMarkDown will be using the (GBD) study to explore the relationships between different measurements of health burden (Deaths, YLLs, YLDs, DALYS) by Causes | Age | Sex. The data stems from recent estimates of disease burden in INDIA. As a more nuanced metric, we’ll consider the Years of Life Lost, Years Lived With Disability and DALYs. 
+
+\newline
+
+YLLs incorporates the age at death to apply a higher burden to diseases that affect younger people. YLL is the total number of years that people in a population did not live, when they were expected to. Basically the number of years stolen from someone's life. 
+
+\newline
+
+Years Lived With Disability (YLDS) is the number of years of healthy life lost. This is determined by how many people have the impariment in the population. You can calculate it by multiplying the incidence / prevalence of condition by the disability weight and the average duration of the condition. This accounts for the prevalence of the disease, time symptomtic and severity. 
+
+\newline
+
+DALYS are the years lost due to ill health, disability or early death. You calculate the DALY by adding the Years of Life Lost (YLL) and Years Lived with Disability (YLD). These are also influenced by age-weights and discountings. Using DALY makes it easier for people & doctors to compare the impact of diseases.
+
+\newline
+
+\newline
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+## Get Rid of Scientific Notations
+options(scipen=999)
+
+## Combined Data (Three CSVs)
+combined_data <- merge(death_data, ylds_data)
+combined_data <- merge(combined_data, expectancy_data)
+
+## Change NA's to 0's (Taking care of the NAs)
+combined_data[is.na(combined_data)] <- 0 
+
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Calculations for DALYS + YLLS:
+combined_data$ylls <- combined_data$deaths * combined_data$life.expectancy
+combined_data$dalys <- combined_data$ylls + combined_data$ylds
+
+```
+
+## Differences in Health Burden by (CAUSE) 
+**Question** : 
+Using the chart below, figure out which disease/disorder cause has the most Burden of Disease and why that is. 
+
+### Report:
+From the table created below using the three CSV's provided. We can use it to figure out which cause of disease burden causes the most fatalities, YLLS, YLDS, and DALYS. After using the table and looking through, the disease/disorder that caused the most death was Ischemic Heart Diseases, with a death count of 15,865,008.214. Since Deaths and the Years of Life Lost are closely correlated, it was not a surprise that the highest years of life lost was also due to Ischemic Heart Disease.
+
+\newline
+
+However, the Years Lived with Disability means to the number of healthy life lost. This is the reason as to why there are 0's for deaths and the number of Years Life Lost. YLDs doesn't necessarily mean to die or have a strong correlation with Years of Life lost, which is why the there are some values that are set at 0. The highest cause for years lived with a disability is low back and neck pain, thus saying that once someone starts experiencing any low back or neck pain the YLDs count starts. Because it is that day where healthy life is lost. 
+
+\newline
+
+As for DALYs, it was not a surprise that the cause for the highest DALY number was due to Ischemic Heart Disease. It has a DALY count of 36,921,471.98. Since Ischemic Heart Disease was the cause of the highest Deaths and Years of Life Lost, those combined and the days of healthy life lost (YLDs), it would be equaled to the DALY which is why Ischemic Heart Disease has such a high count of DALY. Because of this table, we can confidently say that Ischemic Heart Disease is the disease that causes the Burden between males and females of all ages.
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Burden of CAUSE
+cause_data <- combined_data
+
+## Aggregate the Data
+cause_data <- cause_data %>% 
+  group_by(cause_name) %>% 
+  summarize(deaths = sum(deaths), ylds = sum(ylds), dalys = sum(dalys), ylls = sum(ylls))
+
+# Change the names of each column and reorder them 
+names(cause_data) <- c("Cause", "Deaths", "YLDS", "DALYS", "YLLS")
+cause_data <- cause_data[c("Cause", "Deaths", "YLLS", "YLDS", "DALYS")]
+
+## Create Table with 10 on each page
+DT::datatable(cause_data, options = list(pageLength = 10))
+
+```
+
+## Differences in Health Burden by (AGE)
+**Question** :  
+Compare and contrast the YLLs count in each age group and the Deaths of each age group and how they correlate with each other. 
+
+### Report:
+Disease of burden via AGE. Below are two graphs; one of "YLLs in Each Age Group" and another about the "Deaths in Each Age Group." There is a noticeable trend as the age group increases there are consistently more deaths, but there is just one exception of this. And as the age group increases, the Years of Life Lost (YLLs) also has a subtle positive increase but a positive one either way and it slowly dips down after the age group of 65 to 69. There are some instances that make the data seem a little bit suspicious. It was surprising to see that the deaths in the age group "0-4 / Under 5" was very high up in the death tally with a total of 1,249,673.43. This may be due to the environment that this dataset was collected from. The highest death toll by age groups was the age group of 80 and over (80+) with a toll of 1,478,880.08 lives. As you can see, the death toll for the youngest age group and the oldest age group are pretty similar. But there is one huge disparity. It’s that the youngest age group (Under 5), their years of life lost was much greater than those who were 80 and over. Age group 0 to 5 had a YLLs count of 107,509,969 years whereas for the age group of 80 and over, their YLLs was 10,975,224; 10 times less the amount of the youngest age group. If you think about it carefully, it does make sense as when you die younger, the years of life lost would be considerably greater than those who have lived a long life already. 
+  
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Burden of AGE
+age_data <- combined_data
+
+## Aggregate the AGE Data
+age_data <- age_data %>% 
+  group_by(age) %>% 
+  summarize(deaths = sum(deaths), ylds = sum(ylds), dalys = sum(dalys), ylls = sum(ylls))
+
+## Two Plots
+## Plot of YLLS in each AGE group 
+age_plot1 <- ggplot(age_data, aes(x = age, y = ylls)) + 
+  geom_point(aes(colour = age)) + 
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ggtitle("YLLS In Each Age Group") + 
+  xlab("Age Groups") + 
+  ylab("Number Of YLLs")
+
+## Plot of DEATHS in each AGE group 
+age_plot2 <- ggplot(age_data, aes(x = age, y = deaths)) + 
+  geom_point(aes(colour = age)) + 
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ggtitle("Deaths In Each Age Groups") + 
+  xlab("Age Groups") + 
+  ylab("Number Of Deaths")
+
+## Plots with Hover Effect 
+ggplotly(age_plot1, tooltip = "ylls")
+ggplotly(age_plot2, tooltip = "deaths")
+
+
+## MultiPlot at Once 
+# multiplot(age_plot1, age_plot2, cols = 1)
+
+```
+
+## Differences in Health Burden by (SEX) 
+**Question** : 
+Compare the number of deaths by gender and make some inferences as to why one might be greater than the other. 
+
+### Report:
+From the visualizations created below, the estimates of disease of burden (Deaths) in India are higher with males. Approximately, there were  5,749,004.34 males deaths in this dataset and approximately 4,499,734.77 female deaths. Thus, it was not surprising to see that the DALYs for men was higher than the females. DALYs are the years lost due to ill health, disability or early death, basically everything combined in one’s life. If you look at the visualization you can see that the difference in the bars between the two metrics (Death and DALYs) are not that far off. With the females taking around 75% of the bar and the males taking about 90%. With this conclusion, we can confidently say that, as there are more deaths, then there will simultaneously be more DALYs too. As there were no specificities as to why the males died more frequently in this dataset, we can assume that it had to be related to having Ischemic Heart Diseases because that was the leading cause of deaths in this dataset or the environment that this dataset was collected from. There are many factors that we are not aware of.
+    
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Burden of SEX 
+sex_data <- combined_data
+
+## Aggregate the SEX Dataset
+sex_data <- sex_data %>% 
+  group_by(sex) %>% 
+  summarize(deaths = sum(deaths), ylds = sum(ylds), dalys = sum(dalys), ylls = sum(ylls))
+
+## Plots 
+## Plot of DEATHS By SEX
+sex_plot1 <- ggplot(data=sex_data, aes(x=sex, y=deaths)) +
+  geom_bar(stat = "identity", fill = "red")+
+  geom_text(aes(label = deaths), vjust = 1.6, color = "white", size = 2.5)+
+  theme_minimal() + 
+  ggtitle("Number of Deaths By Genders") + 
+  xlab("Gender") + 
+  ylab("Number Of Deaths")
+
+## Plot of DALYS By GENDERS
+sex_plot2 <- ggplot(data=sex_data, aes(x=sex, y=dalys)) +
+  geom_bar(stat = "identity", fill = "steelblue")+
+  geom_text(aes(label = dalys), vjust = 1.6, color = "white", size = 2.5)+
+  theme_minimal() + 
+  scale_y_continuous(name="Fluorescent intensity/arbitrary units", labels = comma) + 
+  ggtitle("Impact of DALYs By Genders") + 
+  xlab("Gender") + 
+  ylab("Number Of DALYs")
+
+## Plot Graphs on same Visualization
+multiplot(sex_plot1, sex_plot2, cols = 2)
+
+```
+
